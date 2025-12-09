@@ -1,2 +1,7 @@
 __pycache__/
 data/
+training_results_flash_attention.png
+best_model_flash_attention.pth
+final_model_flash_attention.pth
+test_data/
+train_data/
