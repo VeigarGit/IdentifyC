@@ -12,21 +12,7 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 import seaborn as sns
 from sklearn.metrics import classification_report, confusion_matrix
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.utils.data import DataLoader, random_split
-from torchvision import datasets, transforms
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-import os
-from shutil import copyfile
-from sklearn.model_selection import train_test_split
-import numpy as np
-import seaborn as sns
-from sklearn.metrics import classification_report, confusion_matrix
+from prunning import prune_and_restructure
 
 # ========== CONFIGURAÇÃO DOS DIRETÓRIOS DOS DADOS ==========
 # Diretório raiz do dataset Multi Cancer
@@ -166,8 +152,12 @@ class SimpleModelWithFlashAttention(nn.Module):
         assert dim % n_heads == 0, "dim deve ser divisível por n_heads"
         
         # Projeções para Q, K, V - atenção à dimensão de entrada!
-        self.to_qkv = nn.Linear(dim, dim * 3)  # Entrada: 64 (features por posição)
+        self.to_qkv = nn.Linear(dim, dim * 3)
+        self.to_qkv.is_attention = True  # atributo personalizado
+
         self.attention_out = nn.Linear(dim, dim)
+        self.attention_out.is_attention = True
+
         
         # AGORA: entrada do fc1 depende de como agregamos as 25 posições
         self.fc1 = nn.Sequential(
@@ -181,11 +171,6 @@ class SimpleModelWithFlashAttention(nn.Module):
         # Parte convolucional (igual)
         out = self.conv1(x)  # (batch, 32, 14, 14)
         out = self.conv2(out)  # (batch, 64, 5, 5)
-        
-        # MUDANÇA CRÍTICA AQUI:
-        # Não fazer flatten total! Queremos manter as posições espaciais
-        # Transformar (batch, 64, 5, 5) → (batch, 25, 64)
-        
         # 1. Flatten apenas as dimensões espaciais
         out = out.flatten(2)  # (batch, 64, 25)
         # 2. Transpor para ter sequência de 25 elementos com 64 features cada
@@ -204,7 +189,7 @@ class SimpleModelWithFlashAttention(nn.Module):
         # Flash Attention - AGORA com sequência real!
         attn_output = F.scaled_dot_product_attention(
             q, k, v,
-            dropout_p=0.5
+            dropout_p=0.2
         )
         
         # Reformatar: (batch, heads, seq_len, head_dim) → (batch, seq_len, features)
@@ -214,9 +199,6 @@ class SimpleModelWithFlashAttention(nn.Module):
         
         # Projeção de saída do attention
         attn_output = self.attention_out(attn_output)
-        
-        # MUDANÇA: Como agregar as 25 posições?
-        # Opção 1: Pooling global (média sobre as posições)
         aggregated = attn_output.mean(dim=1)  # (batch, 64)
         # Opção 2: Usar só a primeira posição (como [CLS] token)
         # aggregated = attn_output[:, 0, :]  # (batch, 64)
@@ -408,7 +390,9 @@ def main():
     # Loop de treinamento
     print("Iniciando treinamento...")
     best_val_acc = 0.0
-    
+    print(model)
+    model, masks = prune_and_restructure(model, pruning_rate=0, data='cancer')  # Podar 20% dos pesos
+
     for epoch in range(num_epochs):
         # Treinar
         train_loss, train_acc = train_epoch(
