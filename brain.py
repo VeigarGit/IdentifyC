@@ -391,8 +391,8 @@ def main():
     print("Iniciando treinamento...")
     best_val_acc = 0.0
     print(model)
-    model, masks = prune_and_restructure(model, pruning_rate=0, data='cancer')  # Podar 20% dos pesos
-
+    #model, masks = prune_and_restructure(model, pruning_rate=0.2)  # Podar 20% dos pesos
+    first = True
     for epoch in range(num_epochs):
         # Treinar
         train_loss, train_acc = train_epoch(
@@ -422,7 +422,9 @@ def main():
         train_accs.append(train_acc)
         val_losses.append(val_loss)
         val_accs.append(val_acc)
-        
+        if first:
+            first = False
+            model, masks = prune_and_restructure(model, pruning_rate=0.4)  # Podar 20% dos pesos
         print(f"Epoch {epoch+1}/{num_epochs}:")
         print(f"  Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.2f}%")
         print(f"  Val Loss:   {val_loss:.4f}, Val Acc:   {val_acc:.2f}%")

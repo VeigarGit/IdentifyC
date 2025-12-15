@@ -5,3 +5,5 @@ best_model_flash_attention.pth
 final_model_flash_attention.pth
 test_data/
 train_data/
+train_data_multicancer/
+test_data_multicancer/
